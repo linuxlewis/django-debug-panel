@@ -14,6 +14,7 @@ from django.conf import settings
 from debug_panel.cache import cache
 import debug_toolbar.middleware
 from debug_toolbar.toolbar import DebugToolbar
+from debug_toolbar.utils import clear_stack_trace_caches
 
 # the urls patterns that concern only the debug_panel application
 import debug_panel.urls
@@ -54,26 +55,44 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
             res = resolve(request.path, urlconf=debug_panel.urls)
             return res.func(request, *res.args, **res.kwargs)
         except Resolver404:
-            toolbar = None
+            # Decide whether the toolbar is active for this request.
+            if not show_toolbar(request) or DebugToolbar.is_toolbar_request(request):
+                return self.get_response(request)
 
-            def handle_toolbar_created(sender, **kwargs):
-                nonlocal toolbar
-                toolbar = kwargs.get('toolbar')
+            toolbar = DebugToolbar(request, self.get_response)
 
-            DebugToolbar._created.connect(handle_toolbar_created)
+            # Activate instrumentation ie. monkey-patch.
+            for panel in toolbar.enabled_panels:
+                panel.enable_instrumentation()
+            try:
+                # Run panels like Django middleware.
+                response = toolbar.process_request(request)
+            finally:
+                clear_stack_trace_caches()
+                # Deactivate instrumentation ie. monkey-unpatch. This must run
+                # regardless of the response. Keep 'return' clauses below.
+                for panel in reversed(toolbar.enabled_panels):
+                    panel.disable_instrumentation()
 
-            response = super().__call__(request)
+            # Generate the stats for all requests when the toolbar is being shown,
+            # but not necessarily inserted.
+            for panel in reversed(toolbar.enabled_panels):
+                panel.generate_stats(request, response)
+                panel.generate_server_timing(request, response)
 
-            DebugToolbar._created.disconnect(handle_toolbar_created)
+            # Always render the toolbar for the history panel, even if it is not
+            # included in the response.
+            rendered = toolbar.render_toolbar()
 
-            if toolbar:
-                # Render the toolbar again for the panel cache
-                rendered = toolbar.render_toolbar()
+            for header, value in self.get_headers(request, toolbar.enabled_panels).items():
+                response.headers[header] = value
 
-                cache_key = "%f" % time.time()
-                cache.set(cache_key, rendered)
+            rendered = toolbar.render_toolbar()
 
-                response['X-debug-data-url'] = request.build_absolute_uri(
-                    reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
+            cache_key = "%f" % time.time()
+            cache.set(cache_key, rendered)
+
+            response['X-debug-data-url'] = request.build_absolute_uri(
+                reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
 
             return response
