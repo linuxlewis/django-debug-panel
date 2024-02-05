@@ -56,9 +56,9 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
         except Resolver404:
             toolbar = None
 
-            def handle_toolbar_created(sender, created_toolbar, **kwargs):
+            def handle_toolbar_created(sender, **kwargs):
                 nonlocal toolbar
-                toolbar = created_toolbar
+                toolbar = kwargs.get('toolbar')
 
             DebugToolbar._created.connect(handle_toolbar_created)
 
