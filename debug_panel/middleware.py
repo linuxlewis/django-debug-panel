@@ -16,6 +16,7 @@ import debug_toolbar.middleware
 
 # the urls patterns that concern only the debug_panel application
 import debug_panel.urls
+from debug_panel.toolbar import DebugToolbar
 
 def show_toolbar(request):
     """
@@ -36,7 +37,10 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
     on outgoing response.
     """
 
-    def process_request(self, request):
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
         """
         Try to match the request with an URL from debug_panel application.
 
@@ -48,33 +52,27 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
 
         try:
             res = resolve(request.path, urlconf=debug_panel.urls)
+            return res.func(request, *res.args, **res.kwargs)
         except Resolver404:
-            return super(DebugPanelMiddleware, self).process_request(request)
+            toolbar = None
 
-        return res.func(request, *res.args, **res.kwargs)
+            def handle_toolbar_created(sender, created_toolbar, **kwargs):
+                nonlocal toolbar
+                toolbar = created_toolbar
 
+            DebugToolbar._created.connect(handle_toolbar_created)
 
-    def process_response(self, request, response):
-        """
-        Store the DebugToolbarMiddleware rendered toolbar into a cache store.
+            response = super().request(**request)
 
-        The data stored in the cache are then reachable from an URL that is appened
-        to the HTTP response header under the 'X-debug-data-url' key.
-        """
-        toolbar = self.__class__.debug_toolbars.get(threading.current_thread().ident, None)
+            DebugToolbar._created.disconnect(handle_toolbar_created)
 
-        response = super(DebugPanelMiddleware, self).process_response(request, response)
-
-        if toolbar:
-            # for django-debug-toolbar >= 1.4
-            for panel in reversed(toolbar.enabled_panels):
-                if hasattr(panel, 'generate_stats'):
-                    panel.generate_stats(request, response)
+            # Render the toolbar again for the panel cache
+            rendered = toolbar.render_toolbar()
 
             cache_key = "%f" % time.time()
-            cache.set(cache_key, toolbar.render_toolbar())
+            cache.set(cache_key, rendered)
 
             response['X-debug-data-url'] = request.build_absolute_uri(
                 reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
 
-        return response
+            return response
