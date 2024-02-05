@@ -13,6 +13,7 @@ except ImportError:
 from django.conf import settings
 from debug_panel.cache import cache
 import debug_toolbar.middleware
+from debug_toolbar.middleware import get_show_toolbar
 from debug_toolbar.toolbar import DebugToolbar
 from debug_toolbar.utils import clear_stack_trace_caches
 
@@ -56,6 +57,7 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
             return res.func(request, *res.args, **res.kwargs)
         except Resolver404:
             # Decide whether the toolbar is active for this request.
+            show_toolbar = get_show_toolbar()
             if not show_toolbar(request) or DebugToolbar.is_toolbar_request(request):
                 return self.get_response(request)
 
