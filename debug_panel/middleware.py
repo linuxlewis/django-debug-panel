@@ -66,13 +66,14 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
 
             DebugToolbar._created.disconnect(handle_toolbar_created)
 
-            # Render the toolbar again for the panel cache
-            rendered = toolbar.render_toolbar()
+            if toolbar:
+                # Render the toolbar again for the panel cache
+                rendered = toolbar.render_toolbar()
 
-            cache_key = "%f" % time.time()
-            cache.set(cache_key, rendered)
+                cache_key = "%f" % time.time()
+                cache.set(cache_key, rendered)
 
-            response['X-debug-data-url'] = request.build_absolute_uri(
-                reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
+                response['X-debug-data-url'] = request.build_absolute_uri(
+                    reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
 
             return response
