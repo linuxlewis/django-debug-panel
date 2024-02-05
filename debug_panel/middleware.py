@@ -62,7 +62,7 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
 
             DebugToolbar._created.connect(handle_toolbar_created)
 
-            response = super().request(**request)
+            response = super().__call__(request)
 
             DebugToolbar._created.disconnect(handle_toolbar_created)
 
