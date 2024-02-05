@@ -13,10 +13,10 @@ except ImportError:
 from django.conf import settings
 from debug_panel.cache import cache
 import debug_toolbar.middleware
+from debug_toolbar.toolbar import DebugToolbar
 
 # the urls patterns that concern only the debug_panel application
 import debug_panel.urls
-from debug_panel.toolbar import DebugToolbar
 
 def show_toolbar(request):
     """
