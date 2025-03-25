@@ -1,30 +1,31 @@
 """
 Debug Panel middleware
 """
+
 import threading
 import time
 
-
 try:
-    from django.urls import reverse, resolve, Resolver404
+    from django.urls import Resolver404, resolve, reverse
 except ImportError:
-    from django.core.urlresolvers import reverse, resolve, Resolver404
+    from django.core.urlresolvers import Resolver404, resolve, reverse
 
-from django.conf import settings
-from debug_panel.cache import cache
 import debug_toolbar.middleware
 from debug_toolbar.middleware import get_show_toolbar
 from debug_toolbar.toolbar import DebugToolbar
 from debug_toolbar.utils import clear_stack_trace_caches
+from django.conf import settings
 
 # the urls patterns that concern only the debug_panel application
 import debug_panel.urls
+from debug_panel.cache import cache
+
 
 def show_toolbar(request):
     """
     Default function to determine whether to show the toolbar on a given page.
     """
-    if request.META.get('REMOTE_ADDR', None) not in settings.INTERNAL_IPS:
+    if request.META.get("REMOTE_ADDR", None) not in settings.INTERNAL_IPS:
         return False
 
     return bool(settings.DEBUG)
@@ -57,7 +58,7 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
             return res.func(request, *res.args, **res.kwargs)
         except Resolver404:
             # Decide whether the toolbar is active for this request.
-            show_toolbar = get_show_toolbar()
+            show_toolbar = get_show_toolbar(False)
             if not show_toolbar(request) or DebugToolbar.is_toolbar_request(request):
                 return self.get_response(request)
 
@@ -86,7 +87,9 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
             # included in the response.
             rendered = toolbar.render_toolbar()
 
-            for header, value in self.get_headers(request, toolbar.enabled_panels).items():
+            for header, value in self.get_headers(
+                request, toolbar.enabled_panels
+            ).items():
                 response.headers[header] = value
 
             rendered = toolbar.render_toolbar()
@@ -94,7 +97,12 @@ class DebugPanelMiddleware(debug_toolbar.middleware.DebugToolbarMiddleware):
             cache_key = "%f" % time.time()
             cache.set(cache_key, rendered)
 
-            response['X-debug-data-url'] = request.build_absolute_uri(
-                reverse('debug_data', urlconf=debug_panel.urls, kwargs={'cache_key': cache_key}))
+            response["X-debug-data-url"] = request.build_absolute_uri(
+                reverse(
+                    "debug_data",
+                    urlconf=debug_panel.urls,
+                    kwargs={"cache_key": cache_key},
+                )
+            )
 
             return response
